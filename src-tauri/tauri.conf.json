@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Misty Setup",
+        "title": "Misty",
         "width": 560,
         "height": 720,
         "minWidth": 500,

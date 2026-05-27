@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
 
 @theme {
@@ -8,8 +9,17 @@
   --color-border-subtle: #1e1e21;
   --color-text: #ffffff;
   --color-text-muted: #d4d4d8;
+  --color-text-secondary: #d4d4d8;
+  --color-primary: #e4e4e7;
+  --color-primary-hover: #f4f4f5;
+  --color-primary-active: #d4d4d8;
+  --color-primary-glow: #e4e4e733;
+  --color-success: #22c55e;
+  --color-success-hover: #4ade80;
+  --color-danger: #ef4444;
+  --color-danger-hover: #f87171;
   --font-family-sans: "Inter", system-ui, -apple-system, sans-serif;
-  --font-family-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-family-mono: "Inter", system-ui, -apple-system, sans-serif;
 }
 
 :root {
@@ -42,6 +52,16 @@ button {
 
 button:disabled {
   cursor: not-allowed;
+}
+
+.glass-card {
+  background: #0b0d0f;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+input,
+textarea {
+  font-variant-ligatures: no-contextual;
 }
 
 ::selection {
@@ -97,15 +117,22 @@ button:disabled {
 }
 
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 12px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #2b2d31;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #4e5058;
-  border: 2px solid #2b2d31;
+  background: #5a5d66;
+  border: 4px solid transparent;
   border-radius: 999px;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #737782;
+  border: 4px solid transparent;
+  background-clip: content-box;
 }
