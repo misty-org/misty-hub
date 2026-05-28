@@ -1,0 +1,3 @@
+[submodule "vendor/misty-website"]
+	path = vendor/misty-website
+	url = ../misty-website
