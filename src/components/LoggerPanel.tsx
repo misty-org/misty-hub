@@ -1,60 +1,37 @@
-import { useRef, useState, type PointerEvent } from "react";
 import { eventIcon } from "./icons";
 import { useSetupStore } from "../store/useSetupStore";
 
-const minLogHeight = 132;
-const defaultLogHeight = 150;
-const maxLogHeight = 360;
+const defaultLogHeight = 260;
 
-export function LoggerPanel() {
-  const events = useSetupStore((state) => state.events);
-  const [logHeight, setLogHeight] = useState(defaultLogHeight);
-  const dragStartRef = useRef<{ y: number; height: number } | null>(null);
-
-  function startLogDrag(event: PointerEvent<HTMLButtonElement>) {
-    dragStartRef.current = { y: event.clientY, height: logHeight };
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }
-
-  function dragLog(event: PointerEvent<HTMLButtonElement>) {
-    if (!dragStartRef.current) {
-      return;
-    }
-
-    const delta = dragStartRef.current.y - event.clientY;
-    setLogHeight(Math.min(maxLogHeight, Math.max(minLogHeight, dragStartRef.current.height + delta)));
-  }
-
-  function endLogDrag() {
-    dragStartRef.current = null;
-  }
+export function LoggerPanel({
+  source,
+  emptyLabel = "quiet for now",
+  className = "",
+  fill = false,
+}: {
+  source: "installer" | "launcher" | "all";
+  emptyLabel?: string;
+  className?: string;
+  fill?: boolean;
+}) {
+  const { events } = useSetupStore();
+  const filteredEvents =
+    source === "all" ? events : events.filter((event) => event.source === source);
 
   return (
     <footer
-      className="mt-3 flex w-full shrink-0 flex-col overflow-hidden rounded-lg border border-[#1e1e21] bg-[#050607] text-xs text-[#949ba4] shadow-2xl shadow-black/40"
-      style={{ height: logHeight }}
+      className={`flex w-full shrink-0 flex-col overflow-hidden rounded-lg border border-[#1e1e21] bg-[#050607] text-xs text-[#949ba4] shadow-2xl shadow-black/40 ${className}`}
+      style={fill ? undefined : { height: defaultLogHeight }}
     >
-      <button
-        aria-label="Resize logger"
-        className="flex h-7 shrink-0 touch-none items-center justify-center border-b border-[#1e1e21] text-[#71717a] transition hover:text-[#d4d4d8]"
-        onPointerCancel={endLogDrag}
-        onPointerDown={startLogDrag}
-        onPointerMove={dragLog}
-        onPointerUp={endLogDrag}
-        type="button"
-      >
-        <span className="h-0.5 w-8 rounded-full bg-current" />
-      </button>
-
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 pt-3">
-          {events.length === 0 ? (
+          {filteredEvents.length === 0 ? (
             <div className="flex h-full items-center justify-center text-sm text-[#71717a]">
-              quiet for now
+              {emptyLabel}
             </div>
           ) : (
             <ul className="grid gap-2">
-              {events.map((event, index) => (
+              {filteredEvents.map((event, index) => (
                 <li
                   className={
                     event.level === "error"

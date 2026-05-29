@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_NAME="Misty Setup"
+APP_NAME="Misty Hub"
 
 cd "$ROOT_DIR"
 
@@ -48,7 +48,7 @@ npm install -D @tauri-apps/cli tailwindcss @tailwindcss/vite
 if [[ ! -d src-tauri ]]; then
   npx tauri init \
     --app-name "$APP_NAME" \
-    --window-title "Misty Setup" \
+    --window-title "Misty Hub" \
     --frontend-dist "../dist" \
     --dev-url "http://localhost:1420" \
     --before-dev-command "npm run dev -- --host 127.0.0.1 --port 1420" \
@@ -337,7 +337,7 @@ node - <<'NODE'
 const fs = require("fs");
 const path = "package.json";
 const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
-pkg.name = "misty-setup";
+pkg.name = "misty-hub";
 pkg.scripts = {
   ...pkg.scripts,
   dev: "vite --host 127.0.0.1 --port 1420",

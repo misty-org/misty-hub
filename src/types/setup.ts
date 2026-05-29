@@ -49,6 +49,7 @@ export type PathProbe = {
 
 export type InstallEvent = {
   level: "info" | "warn" | "error";
+  source: "installer" | "launcher";
   message: string;
 };
 

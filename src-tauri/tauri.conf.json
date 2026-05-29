@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Misty Setup",
+  "productName": "Misty Hub",
   "version": "0.1.0",
-  "identifier": "app.misty.setup",
+  "identifier": "app.misty.hub",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -12,19 +12,25 @@
   "app": {
     "windows": [
       {
-        "title": "Misty",
-        "width": 560,
-        "height": 720,
-        "minWidth": 500,
-        "minHeight": 640,
-        "maxWidth": 640,
-        "maxHeight": 780,
+        "title": "Misty Hub",
+        "width": 1260,
+        "height": 860,
+        "minWidth": 1100,
+        "minHeight": 760,
         "resizable": true,
         "fullscreen": false
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": {
+          "allow": [
+            "$HOME/.misty/plugins/**"
+          ]
+        }
+      }
     }
   },
   "bundle": {

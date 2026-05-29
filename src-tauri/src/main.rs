@@ -1,5 +1,6 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use std::{
     fs::{self, File},
     io::{self, Cursor},
@@ -50,6 +51,51 @@ struct ReleaseAsset {
     _sha256: String,
 }
 
+#[derive(Debug, Serialize, Clone)]
+struct PluginLink {
+    label: String,
+    url: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+struct PluginAction {
+    label: String,
+    kind: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+struct PluginLauncher {
+    views: Vec<String>,
+    show_in_launcher: bool,
+    requires_selected_file: bool,
+    open_mode: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+struct LocalPluginRecord {
+    id: String,
+    name: String,
+    version: String,
+    author: String,
+    overview: String,
+    status: String,
+    root: String,
+    enabled: bool,
+    installed: bool,
+    verified: bool,
+    manifest_path: String,
+    plugin_dir: String,
+    logo_path: Option<String>,
+    capabilities: Vec<String>,
+    where_it_appears: Vec<String>,
+    permissions: Vec<String>,
+    getting_started: Vec<String>,
+    changelog: Vec<String>,
+    links: Vec<PluginLink>,
+    actions: Vec<PluginAction>,
+    launcher: PluginLauncher,
+}
+
 #[tauri::command]
 fn check_system() -> Result<NativeSystemInfo, String> {
     ensure_database()?;
@@ -59,7 +105,7 @@ fn check_system() -> Result<NativeSystemInfo, String> {
     let db_path = misty_db_path()?;
     let current_user = current_user()?;
     let setup_path = std::env::current_exe()
-        .unwrap_or_else(|_| PathBuf::from("Misty Setup"))
+        .unwrap_or_else(|_| PathBuf::from("Misty Hub"))
         .display()
         .to_string();
 
@@ -97,8 +143,8 @@ fn probe_paths(paths: Vec<String>) -> Result<Vec<PathProbe>, String> {
 
 #[tauri::command]
 fn open_external_url(url: String) -> Result<(), String> {
-    if !url.starts_with("https://mistysys.com/") {
-        return Err("Only mistysys.com links can be opened externally.".to_string());
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("Only http and https links can be opened externally.".to_string());
     }
 
     open_url_in_system_browser(&url)
@@ -133,7 +179,7 @@ async fn install_misty(manifest_url: String, version: String) -> Result<String, 
     for asset in matching_assets {
         if !asset_is_zip(asset) {
             return Err(format!(
-                "Unsupported asset type for {}. Misty Setup currently expects .zip assets.",
+                "Unsupported asset type for {}. Misty Hub currently expects .zip assets.",
                 asset.name
             ));
         }
@@ -152,6 +198,199 @@ async fn install_misty(manifest_url: String, version: String) -> Result<String, 
     Ok(format!(
         "Installed Misty {resolved_version} for {platform} to {} from {asset_count} asset(s).",
         install_dir.display()
+    ))
+}
+
+#[tauri::command]
+fn launch_misty() -> Result<String, String> {
+    let misty_path = misty_bin_dir()?.join("misty");
+    let misty_proxy_path = misty_bin_dir()?.join("misty-proxy");
+
+    if !misty_path.is_file() {
+        return Err(format!("Misty binary was not found at {}.", misty_path.display()));
+    }
+    if !misty_proxy_path.is_file() {
+        return Err(format!(
+            "Misty proxy binary was not found at {}.",
+            misty_proxy_path.display()
+        ));
+    }
+
+    Command::new(&misty_proxy_path)
+        .spawn()
+        .map_err(|error| format!("Could not launch misty-proxy: {error}"))?;
+
+    Command::new(&misty_path)
+        .spawn()
+        .map_err(|error| format!("Could not launch Misty: {error}"))?;
+
+    Ok("Launched misty-proxy and Misty.".to_string())
+}
+
+fn stop_named_processes(names: &[&str]) -> Result<usize, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut stopped = 0;
+        for name in names {
+            let target = format!("{name}.exe");
+            let output = Command::new("taskkill")
+                .args(["/IM", &target, "/F"])
+                .output()
+                .map_err(|error| format!("Could not run taskkill for {target}: {error}"))?;
+
+            if output.status.success() {
+                stopped += 1;
+                continue;
+            }
+
+            let stderr = String::from_utf8_lossy(&output.stderr).to_lowercase();
+            if stderr.contains("not found") || stderr.contains("no running instance") {
+                continue;
+            }
+
+            return Err(format!(
+                "Could not stop {target}: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            ));
+        }
+
+        Ok(stopped)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let mut stopped = 0;
+        for name in names {
+            let status = Command::new("pkill")
+                .args(["-x", name])
+                .status()
+                .map_err(|error| format!("Could not run pkill for {name}: {error}"))?;
+
+            match status.code() {
+                Some(0) => stopped += 1,
+                Some(1) => {}
+                Some(code) => {
+                    return Err(format!("pkill exited with status {code} while stopping {name}."));
+                }
+                None => return Err(format!("pkill terminated unexpectedly while stopping {name}.")),
+            }
+        }
+
+        Ok(stopped)
+    }
+}
+
+#[tauri::command]
+fn restart_misty() -> Result<String, String> {
+    let stopped = stop_named_processes(&["misty", "misty-proxy"])?;
+    let launch_message = launch_misty()?;
+
+    if stopped == 0 {
+        Ok(format!("No running Misty processes were found. {launch_message}"))
+    } else {
+        Ok(format!("Restarted Misty and misty-proxy. {launch_message}"))
+    }
+}
+
+#[tauri::command]
+fn scan_local_plugins() -> Result<Vec<LocalPluginRecord>, String> {
+    let mut plugins = Vec::new();
+    for root_kind in ["private", "public"] {
+        let root_dir = misty_plugin_root_dir(root_kind)?;
+        if !root_dir.exists() {
+            continue;
+        }
+
+        let entries = fs::read_dir(&root_dir)
+            .map_err(|error| format!("Could not read {}: {error}", root_dir.display()))?;
+        for entry in entries {
+            let entry = entry.map_err(|error| format!("Could not read plugin entry: {error}"))?;
+            let plugin_dir = entry.path();
+            if !plugin_dir.is_dir() {
+                continue;
+            }
+            if let Some(plugin) = read_local_plugin_record(&plugin_dir, root_kind)? {
+                plugins.push(plugin);
+            }
+        }
+    }
+
+    plugins.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    Ok(plugins)
+}
+
+#[tauri::command]
+async fn install_plugin_bundle(plugin_id: String, root: String, url: String) -> Result<String, String> {
+    if plugin_id.trim().is_empty() {
+        return Err("Plugin id is required.".to_string());
+    }
+    if !matches!(root.as_str(), "public" | "private") {
+        return Err(format!("Unsupported plugin root: {root}"));
+    }
+    if url.trim().is_empty() {
+        return Err("Plugin artifact URL is required.".to_string());
+    }
+    if !url.to_ascii_lowercase().ends_with(".zip") {
+        return Err("Plugin install currently expects a .zip bundle.".to_string());
+    }
+
+    let client = reqwest::Client::new();
+    let bytes = authed_get(&client, &url)
+        .send()
+        .await
+        .map_err(|error| format!("Could not download plugin bundle: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Plugin download failed: {error}"))?
+        .bytes()
+        .await
+        .map_err(|error| format!("Could not read plugin bundle: {error}"))?;
+
+    let root_dir = misty_plugin_root_dir(&root)?;
+    fs::create_dir_all(&root_dir)
+        .map_err(|error| format!("Could not create plugin root {}: {error}", root_dir.display()))?;
+    extract_plugin_zip_archive(&bytes, &root_dir, &plugin_id)
+        .map_err(|error| format!("Could not extract plugin bundle: {error}"))?;
+
+    Ok(format!("Installed plugin {plugin_id} into {}.", root_dir.join(&plugin_id).display()))
+}
+
+#[tauri::command]
+fn uninstall_plugin(plugin_id: String, root: String) -> Result<String, String> {
+    if plugin_id.trim().is_empty() {
+        return Err("Plugin id is required.".to_string());
+    }
+    let plugin_dir = misty_plugin_root_dir(&root)?.join(&plugin_id);
+    if !plugin_dir.exists() {
+        return Err(format!("Plugin directory was not found at {}.", plugin_dir.display()));
+    }
+    fs::remove_dir_all(&plugin_dir)
+        .map_err(|error| format!("Could not remove {}: {error}", plugin_dir.display()))?;
+    Ok(format!("Removed plugin {plugin_id}."))
+}
+
+#[tauri::command]
+fn set_plugin_enabled(plugin_id: String, root: String, enabled: bool) -> Result<String, String> {
+    if plugin_id.trim().is_empty() {
+        return Err("Plugin id is required.".to_string());
+    }
+
+    let manifest_path = misty_plugin_root_dir(&root)?.join(&plugin_id).join("manifest.json");
+    let manifest_text = fs::read_to_string(&manifest_path)
+        .map_err(|error| format!("Could not read {}: {error}", manifest_path.display()))?;
+    let mut manifest_json: Value = parse_json_relaxed(&manifest_text)
+        .ok_or_else(|| format!("Manifest JSON was invalid at {}.", manifest_path.display()))?;
+    let object = manifest_json
+        .as_object_mut()
+        .ok_or_else(|| format!("Manifest at {} was not a JSON object.", manifest_path.display()))?;
+    object.insert("enabled".to_string(), json!(enabled));
+    let next_manifest = serde_json::to_string_pretty(&manifest_json)
+        .map_err(|error| format!("Could not serialize plugin manifest: {error}"))?;
+    fs::write(&manifest_path, format!("{next_manifest}\n"))
+        .map_err(|error| format!("Could not write {}: {error}", manifest_path.display()))?;
+
+    Ok(format!(
+        "{} plugin {plugin_id}.",
+        if enabled { "Enabled" } else { "Disabled" }
     ))
 }
 
@@ -264,6 +503,325 @@ fn extract_zip_archive(archive_bytes: &[u8], misty_home: &Path) -> io::Result<()
 fn asset_is_zip(asset: &ReleaseAsset) -> bool {
     asset.name.to_ascii_lowercase().ends_with(".zip")
         || asset.url.to_ascii_lowercase().ends_with(".zip")
+}
+
+fn extract_plugin_zip_archive(
+    archive_bytes: &[u8],
+    plugin_root: &Path,
+    plugin_id: &str,
+) -> io::Result<()> {
+    let target_dir = plugin_root.join(plugin_id);
+    if target_dir.exists() {
+        fs::remove_dir_all(&target_dir)?;
+    }
+    fs::create_dir_all(&target_dir)?;
+
+    let reader = Cursor::new(archive_bytes);
+    let mut archive = ZipArchive::new(reader)?;
+
+    for index in 0..archive.len() {
+        let mut entry = archive.by_index(index)?;
+        let Some(relative_path) = plugin_archive_relative_path(entry.name(), plugin_id) else {
+            continue;
+        };
+        let out_path = target_dir.join(relative_path);
+
+        if entry.is_dir() {
+            fs::create_dir_all(&out_path)?;
+            continue;
+        }
+
+        if let Some(parent) = out_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let mut out_file = File::create(&out_path)?;
+        io::copy(&mut entry, &mut out_file)?;
+
+        #[cfg(unix)]
+        if let Some(mode) = entry.unix_mode() {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&out_path, fs::Permissions::from_mode(mode))?;
+        }
+    }
+
+    if !target_dir.join("manifest.json").is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Plugin bundle did not contain manifest.json",
+        ));
+    }
+
+    Ok(())
+}
+
+fn plugin_archive_relative_path(entry_name: &str, plugin_id: &str) -> Option<PathBuf> {
+    let entry_path = Path::new(entry_name);
+    if entry_path.is_absolute() {
+        return None;
+    }
+
+    let mut components = Vec::new();
+    for component in entry_path.components() {
+        match component {
+            Component::Normal(value) => components.push(value.to_string_lossy().to_string()),
+            Component::CurDir => {}
+            _ => return None,
+        }
+    }
+
+    if components.is_empty() {
+        return None;
+    }
+
+    let slice = if components[0] == plugin_id {
+        &components[1..]
+    } else {
+        &components[..]
+    };
+
+    if slice.is_empty() {
+        return None;
+    }
+
+    let mut relative = PathBuf::new();
+    for part in slice {
+        relative.push(part);
+    }
+    Some(relative)
+}
+
+fn misty_plugin_root_dir(root: &str) -> Result<PathBuf, String> {
+    match root {
+        "public" => misty_home_dir().map(|home| home.join("plugins").join("public")),
+        "private" => misty_home_dir().map(|home| home.join("plugins").join("private")),
+        _ => Err(format!("Unsupported plugin root: {root}")),
+    }
+}
+
+fn read_local_plugin_record(
+    plugin_dir: &Path,
+    root: &str,
+) -> Result<Option<LocalPluginRecord>, String> {
+    let manifest_path = plugin_dir.join("manifest.json");
+    if !manifest_path.is_file() {
+        return Ok(None);
+    }
+
+    let manifest_text = fs::read_to_string(&manifest_path)
+        .map_err(|error| format!("Could not read {}: {error}", manifest_path.display()))?;
+    let manifest_json: Value = parse_json_relaxed(&manifest_text).unwrap_or_else(|| json!({}));
+    let detail_json = plugin_dir
+        .join("plugin.json")
+        .is_file()
+        .then(|| fs::read_to_string(plugin_dir.join("plugin.json")))
+        .transpose()
+        .map_err(|error| format!("Could not read plugin metadata in {}: {error}", plugin_dir.display()))?
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok());
+
+    let manifest_enabled = manifest_json
+        .get("enabled")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+
+    let plugin_json = detail_json.unwrap_or_else(|| json!({}));
+    let id = string_field(&plugin_json, &manifest_json, "id").unwrap_or_else(|| {
+        plugin_dir
+            .file_name()
+            .map(|value| value.to_string_lossy().to_string())
+            .unwrap_or_else(|| "plugin".to_string())
+    });
+    let name = string_field(&plugin_json, &manifest_json, "name").unwrap_or_else(|| id.clone());
+    let version = string_field(&plugin_json, &manifest_json, "version").unwrap_or_else(|| "0.0.0".to_string());
+    let author = string_field(&plugin_json, &manifest_json, "author").unwrap_or_default();
+    let overview = string_field(&plugin_json, &manifest_json, "overview")
+        .or_else(|| string_field(&plugin_json, &manifest_json, "description"))
+        .unwrap_or_default();
+    let status = if manifest_enabled { "installed" } else { "disabled" }.to_string();
+    let verified = plugin_json
+        .get("verified")
+        .and_then(Value::as_bool)
+        .or_else(|| manifest_json.get("verified").and_then(Value::as_bool))
+        .unwrap_or(false);
+
+    Ok(Some(LocalPluginRecord {
+        id,
+        name,
+        version,
+        author,
+        overview,
+        status,
+        root: root.to_string(),
+        enabled: manifest_enabled,
+        installed: true,
+        verified,
+        manifest_path: manifest_path.display().to_string(),
+        plugin_dir: plugin_dir.display().to_string(),
+        logo_path: plugin_logo_path(plugin_dir),
+        capabilities: string_list(&plugin_json, "capabilities"),
+        where_it_appears: string_list(&plugin_json, "where_it_appears"),
+        permissions: string_list(&plugin_json, "permissions"),
+        getting_started: string_list(&plugin_json, "getting_started"),
+        changelog: string_list(&plugin_json, "changelog"),
+        links: plugin_links(&plugin_json),
+        actions: plugin_actions(&plugin_json),
+        launcher: plugin_launcher(&plugin_json, &manifest_json),
+    }))
+}
+
+fn plugin_logo_path(plugin_dir: &Path) -> Option<String> {
+    let assets_dir = plugin_dir.join("assets");
+    [
+        assets_dir.join("logo.svg"),
+        assets_dir.join("logo.png"),
+        assets_dir.join("icon.svg"),
+        assets_dir.join("icon.png"),
+    ]
+    .into_iter()
+    .find(|path| path.is_file())
+    .map(|path| path.display().to_string())
+}
+
+fn parse_json_relaxed(text: &str) -> Option<Value> {
+    serde_json::from_str(text)
+        .ok()
+        .or_else(|| serde_json::from_str(&strip_trailing_commas(text)).ok())
+}
+
+fn strip_trailing_commas(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = 0;
+    let mut in_string = false;
+    let mut escaped = false;
+
+    while i < chars.len() {
+        let ch = chars[i];
+        if in_string {
+            out.push(ch);
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            i += 1;
+            continue;
+        }
+
+        if ch == '"' {
+            in_string = true;
+            out.push(ch);
+            i += 1;
+            continue;
+        }
+
+        if ch == ',' {
+            let mut j = i + 1;
+            while j < chars.len() && chars[j].is_whitespace() {
+                j += 1;
+            }
+            if j < chars.len() && matches!(chars[j], '}' | ']') {
+                i += 1;
+                continue;
+            }
+        }
+
+        out.push(ch);
+        i += 1;
+    }
+
+    out
+}
+
+fn string_field(primary: &Value, fallback: &Value, key: &str) -> Option<String> {
+    primary
+        .get(key)
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
+        .or_else(|| fallback.get(key).and_then(Value::as_str).map(ToString::to_string))
+}
+
+fn string_list(value: &Value, key: &str) -> Vec<String> {
+    value.get(key)
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(ToString::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn plugin_links(value: &Value) -> Vec<PluginLink> {
+    value.get("links")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    Some(PluginLink {
+                        label: item.get("label")?.as_str()?.to_string(),
+                        url: item.get("url")?.as_str()?.to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn plugin_actions(value: &Value) -> Vec<PluginAction> {
+    value.get("actions")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    Some(PluginAction {
+                        label: item.get("label")?.as_str()?.to_string(),
+                        kind: item.get("kind")?.as_str()?.to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn plugin_launcher(plugin_json: &Value, manifest_json: &Value) -> PluginLauncher {
+    let launcher_json = plugin_json
+        .get("launcher")
+        .filter(|value| value.is_object())
+        .or_else(|| manifest_json.get("launcher").filter(|value| value.is_object()));
+
+    PluginLauncher {
+        views: launcher_json
+            .and_then(|value| value.get("views"))
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(ToString::to_string)
+                    .collect()
+            })
+            .unwrap_or_default(),
+        show_in_launcher: launcher_json
+            .and_then(|value| value.get("show_in_launcher"))
+            .and_then(Value::as_bool)
+            .unwrap_or(true),
+        requires_selected_file: launcher_json
+            .and_then(|value| value.get("requires_selected_file"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        open_mode: launcher_json
+            .and_then(|value| value.get("open_mode"))
+            .and_then(Value::as_str)
+            .unwrap_or("tab")
+            .to_string(),
+    }
 }
 
 fn ensure_database() -> Result<(), String> {
@@ -452,10 +1010,17 @@ fn main() {
             check_system,
             ensure_misty_folders,
             install_misty,
+            install_plugin_bundle,
+            launch_misty,
             open_external_url,
             probe_paths,
+            restart_misty,
+            scan_local_plugins,
             save_authenticated_user,
+            set_plugin_enabled,
             sign_out_misty
+            ,
+            uninstall_plugin
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -476,7 +1041,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("time should be available")
             .as_nanos();
-        let path = std::env::temp_dir().join(format!("misty-setup-test-{unique}"));
+        let path = std::env::temp_dir().join(format!("misty-hub-test-{unique}"));
         fs::create_dir_all(&path).expect("temp home should be created");
         path
     }

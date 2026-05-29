@@ -1,16 +1,62 @@
-import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Layers3 } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { ChevronDown } from "lucide-react";
 import { releases } from "../data/releases";
 import { useSetupStore } from "../store/useSetupStore";
 
 export function VersionPicker() {
-  const busy = useSetupStore((state) => state.busy);
-  const selectedVersion = useSetupStore((state) => state.selectedVersion);
-  const selectedRelease = useSetupStore((state) => state.selectedRelease());
-  const setSelectedVersion = useSetupStore((state) => state.setSelectedVersion);
+  const { busy, selectedVersion, selectedRelease, setSelectedVersion } =
+    useSetupStore();
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const [menuRect, setMenuRect] = useState({ left: 0, top: 0, width: 0, maxHeight: 208 });
   const latestVersion = releases[0].version;
+  const release = selectedRelease();
+  const menuViewportMargin = 14;
+  const menuChromeHeight = 12;
+  const menuMaxHeight = 180;
+  const menuMinHeight = 96;
+
+  useLayoutEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function updateMenuRect() {
+      const trigger = triggerRef.current;
+
+      if (!trigger) {
+        return;
+      }
+
+      const rect = trigger.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom - menuViewportMargin;
+      const spaceAbove = rect.top - menuViewportMargin;
+      const shouldOpenAbove = spaceBelow < menuMinHeight + menuChromeHeight && spaceAbove > spaceBelow;
+      const availableSpace = shouldOpenAbove ? spaceAbove : spaceBelow;
+      const maxHeight = Math.max(
+        menuMinHeight,
+        Math.min(menuMaxHeight, availableSpace - menuChromeHeight),
+      );
+
+      setMenuRect({
+        left: rect.left,
+        top: shouldOpenAbove ? rect.top - maxHeight - menuChromeHeight : rect.bottom + 8,
+        width: rect.width,
+        maxHeight,
+      });
+    }
+
+    updateMenuRect();
+    window.addEventListener("resize", updateMenuRect);
+    window.addEventListener("scroll", updateMenuRect, true);
+
+    return () => {
+      window.removeEventListener("resize", updateMenuRect);
+      window.removeEventListener("scroll", updateMenuRect, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) {
@@ -18,7 +64,9 @@ export function VersionPicker() {
     }
 
     function handlePointerDown(event: MouseEvent) {
-      if (!menuRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+
+      if (!menuRef.current?.contains(target) && !triggerRef.current?.contains(target)) {
         setOpen(false);
       }
     }
@@ -39,24 +87,20 @@ export function VersionPicker() {
   }, [open]);
 
   return (
-    <div className="relative min-w-0 flex-1" ref={menuRef}>
+    <div className="relative min-w-0 flex-1">
       <button
         aria-expanded={open}
         aria-haspopup="listbox"
         className="flex h-10 w-full items-center justify-between gap-3 rounded-md border border-white/10 bg-[#080b0e] px-3.5 text-left text-sm font-semibold text-white outline-none transition hover:border-white/20 hover:bg-[#0b1014] focus:border-[#7dd3fc] disabled:cursor-not-allowed disabled:opacity-60"
         disabled={busy}
         onClick={() => setOpen((value) => !value)}
+        ref={triggerRef}
         type="button"
       >
         <span className="flex min-w-0 items-center gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white/[0.06] text-[#7dd3fc]">
-            <Layers3 aria-hidden="true" className="h-4 w-4" />
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate">{selectedRelease.version}</span>
-            <span className="block truncate text-[11px] font-medium text-[#8f99a6]">
-              {selectedRelease.version === latestVersion ? "Latest release" : selectedRelease.date}
-            </span>
+          <span className="truncate">{release.version}</span>
+          <span className="truncate text-[11px] font-medium text-[#8f99a6]">
+            {release.version === latestVersion ? "Latest release" : release.date}
           </span>
         </span>
         <ChevronDown
@@ -65,9 +109,19 @@ export function VersionPicker() {
         />
       </button>
 
-      {open && (
-        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-lg border border-white/10 bg-[#050607] p-1 shadow-2xl shadow-black/50">
-          <div className="grid gap-1" role="listbox" aria-label="Version">
+      {open &&
+        createPortal(
+        <div
+          className="fixed z-50 overflow-hidden rounded-lg border border-white/10 bg-[#050607] p-1 shadow-2xl shadow-black/50"
+          ref={menuRef}
+          style={{ left: menuRect.left, top: menuRect.top, width: menuRect.width }}
+        >
+          <div
+            className="grid gap-1 overflow-y-scroll overscroll-contain pr-1 [scrollbar-gutter:stable]"
+            role="listbox"
+            aria-label="Version"
+            style={{ maxHeight: menuRect.maxHeight }}
+          >
             {releases.map((release) => {
               const selected = release.version === selectedVersion;
 
@@ -100,7 +154,8 @@ export function VersionPicker() {
               );
             })}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

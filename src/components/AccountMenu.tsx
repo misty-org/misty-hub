@@ -5,12 +5,13 @@ import { useUserStore } from "../store/userStore";
 import { useSetupStore } from "../store/useSetupStore";
 
 export function AccountMenu() {
-  const currentUser = useSetupStore((state) => state.status?.current_user ?? null);
+  const { status } = useSetupStore();
   const { user, logout } = useAuth();
-  const me = useUserStore((state) => state.me);
+  const { me } = useUserStore();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
+  const currentUser = status?.current_user ?? null;
   const account = currentUser ?? user;
   const displayName = me?.name ?? account?.name ?? "";
   const initials = displayName
@@ -88,6 +89,15 @@ export function AccountMenu() {
               <p className="truncate text-sm font-medium text-text">{displayName}</p>
               <p className="truncate text-xs text-text-muted">{account.email}</p>
             </div>
+
+            <Link
+              className="block px-4 py-2.5 text-sm text-text-muted transition-colors hover:bg-elevated hover:text-text"
+              onClick={() => setOpen(false)}
+              role="menuitem"
+              to="/plugins"
+            >
+              Plugins
+            </Link>
 
             <Link
               className="block px-4 py-2.5 text-sm text-text-muted transition-colors hover:bg-elevated hover:text-text"

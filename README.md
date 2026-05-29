@@ -1,6 +1,6 @@
-# Misty Setup
+# Misty Hub
 
-Tauri + React + TypeScript + Tailwind setup shell for Misty.
+Tauri + React + TypeScript + Tailwind hub shell for Misty.
 
 ## Scaffold
 
@@ -38,7 +38,7 @@ For a private/internal first pass, the scaffold leaves a `MISTY_DOWNLOAD_TOKEN` 
 
 ## Release Manifest
 
-Misty Setup currently fetches a JSON manifest for the selected release. See [docs/release-manifest.example.json](/Users/mtccool668/projects/misty-setup/docs/release-manifest.example.json).
+Misty Hub currently fetches a JSON manifest for the selected release.
 
 Expected shape:
 
@@ -58,6 +58,6 @@ Expected shape:
 
 `platform` must match Rust's `std::env::consts::OS` and `std::env::consts::ARCH` joined with a dash, such as `macos-aarch64`, `macos-x86_64`, `windows-x86_64`, or `linux-x86_64`.
 
-Misty Setup initializes `~/.misty`, creates `~/.misty/db/data.db`, and downloads matching `.zip` assets into `~/.misty/local/bin`. Installs are blocked until the local database has an authenticated Misty user.
+Misty Hub initializes `~/.misty`, creates `~/.misty/db/data.db`, and downloads matching `.zip` assets into `~/.misty/.local/bin`. Installs are blocked until the local database has an authenticated Misty user.
 
 For production, point each `url` at a short-lived signed URL or your download broker, then verify `sha256` before installing.

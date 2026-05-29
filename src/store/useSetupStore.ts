@@ -22,8 +22,10 @@ type SetupStore = {
   selectedRelease: () => ReleaseVersion;
   addEvent: (event: InstallEvent) => void;
   loadSystem: () => Promise<void>;
+  restartMisty: () => Promise<void>;
   saveAuthenticatedUser: (user: CurrentUser) => Promise<void>;
   setSelectedVersion: (version: string) => void;
+  launchMisty: () => Promise<void>;
   signOut: () => Promise<void>;
   startInstall: () => Promise<void>;
 };
@@ -74,12 +76,12 @@ function browserSystemFallback(): InstallerStatus {
       },
     ],
     setup_update: {
-      name: "Misty Setup",
+      name: "Misty Hub",
       path: "browser preview",
       required: false,
       exists: true,
       status: "pending",
-      message: "Setup update check is only available in the desktop app.",
+      message: "Hub update check is only available in the desktop app.",
     },
   };
 }
@@ -125,24 +127,48 @@ export const useSetupStore = create<SetupStore>((set, get) => ({
   saveAuthenticatedUser: async (user) => {
     const native = await invoke<NativeSystemInfo>("save_authenticated_user", { user });
     const status = await loadInstallerStatus(native);
-    set((state) => ({
-      status,
-      systemError: "",
-      events: [...state.events, { level: "info", message: `Signed in as ${user.email}.` }],
-    }));
+      set((state) => ({
+        status,
+        systemError: "",
+        events: [...state.events, { level: "info", source: "installer", message: `Signed in as ${user.email}.` }],
+      }));
   },
   setSelectedVersion: (selectedVersion) => set({ selectedVersion }),
+  launchMisty: async () => {
+    try {
+      const result = await invoke<string>("launch_misty");
+      set((state) => ({
+        events: [...state.events, { level: "info", source: "launcher", message: result }],
+      }));
+    } catch (error) {
+      set((state) => ({
+        events: [...state.events, { level: "error", source: "launcher", message: String(error) }],
+      }));
+    }
+  },
+  restartMisty: async () => {
+    try {
+      const result = await invoke<string>("restart_misty");
+      set((state) => ({
+        events: [...state.events, { level: "info", source: "launcher", message: result }],
+      }));
+    } catch (error) {
+      set((state) => ({
+        events: [...state.events, { level: "error", source: "launcher", message: String(error) }],
+      }));
+    }
+  },
   signOut: async () => {
     try {
       const native = await invoke<NativeSystemInfo>("sign_out_misty");
       const status = await loadInstallerStatus(native);
       set((state) => ({
         status,
-        events: [...state.events, { level: "info", message: "Signed out of Misty." }],
+        events: [...state.events, { level: "info", source: "installer", message: "Signed out of Misty." }],
       }));
     } catch (error) {
       set((state) => ({
-        events: [...state.events, { level: "error", message: String(error) }],
+        events: [...state.events, { level: "error", source: "installer", message: String(error) }],
       }));
     }
   },
@@ -153,7 +179,7 @@ export const useSetupStore = create<SetupStore>((set, get) => ({
     if (!status?.current_user) {
       set({
         installState: "error",
-        events: [{ level: "error", message: "Sign in to Misty before installing." }],
+        events: [{ level: "error", source: "installer", message: "Sign in to Misty before installing." }],
       });
       return;
     }
@@ -161,7 +187,7 @@ export const useSetupStore = create<SetupStore>((set, get) => ({
     set({
       busy: true,
       installState: "installing",
-      events: [{ level: "info", message: `Preparing Misty ${release.version}.` }],
+      events: [{ level: "info", source: "installer", message: `Preparing Misty ${release.version}.` }],
     });
 
     try {
@@ -174,13 +200,13 @@ export const useSetupStore = create<SetupStore>((set, get) => ({
         busy: false,
         installState: "success",
         status,
-        events: [...state.events, { level: "info", message: result }],
+        events: [...state.events, { level: "info", source: "installer", message: result }],
       }));
     } catch (error) {
       set((state) => ({
         busy: false,
         installState: "error",
-        events: [...state.events, { level: "error", message: String(error) }],
+        events: [...state.events, { level: "error", source: "installer", message: String(error) }],
       }));
     }
   },

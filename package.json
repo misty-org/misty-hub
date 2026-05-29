@@ -1,5 +1,5 @@
 {
-  "name": "misty-setup",
+  "name": "misty-hub",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -15,6 +15,7 @@
     "lucide-react": "^1.16.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "react-icons": "^5.6.0",
     "react-router": "^7.15.1",
     "zustand": "^5.0.13"
   },
@@ -23,7 +24,7 @@
     "@tailwindcss/vite": "^4.3.0",
     "@tauri-apps/cli": "^2.11.2",
     "@types/node": "^24.12.3",
-    "@types/react": "^19.2.14",
+    "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
     "eslint": "^10.3.0",

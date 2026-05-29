@@ -2,24 +2,25 @@ import { CheckCircle2 } from "lucide-react";
 import { useSetupStore } from "../store/useSetupStore";
 
 export function ChangelogPanel() {
-  const selectedRelease = useSetupStore((state) => state.selectedRelease());
+  const { selectedRelease } = useSetupStore();
+  const release = selectedRelease();
 
   return (
     <section className="rounded-xl border border-[#1e1e21] bg-[#0b0d0f]">
       <div className="sticky top-0 border-b border-[#1e1e21] bg-[#0b0d0f]/95 px-4 py-3 backdrop-blur">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-bold text-white">{selectedRelease.version}</h2>
-            <p className="mt-1 truncate text-sm text-[#a1a1aa]">{selectedRelease.summary}</p>
+            <h2 className="truncate text-sm font-bold text-white">{release.version}</h2>
+            <p className="mt-1 truncate text-sm text-[#a1a1aa]">{release.summary}</p>
           </div>
           <span className="shrink-0 rounded-md border border-[#27272a] px-2 py-1 font-mono text-xs text-[#d4d4d8]">
-            {selectedRelease.date}
+            {release.date}
           </span>
         </div>
       </div>
 
       <div className="grid gap-2 p-3">
-        {selectedRelease.changes.map((change) => (
+        {release.changes.map((change) => (
           <div
             className="flex items-start gap-3 rounded-lg border border-[#1e1e21] bg-[#07090b] px-3 py-3 text-sm text-[#d4d4d8]"
             key={change}

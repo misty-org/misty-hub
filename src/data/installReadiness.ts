@@ -70,14 +70,14 @@ export function buildInstallerStatus(
   });
 
   const setupUpdate: InstallCheck = {
-    name: "Misty Setup",
+    name: "Misty Hub",
     path: native.setup_path,
     required: false,
     exists: Boolean(setupProbe?.is_file || setupProbe?.exists),
     status: "pending",
     message: setupProbe?.exists
-      ? "Setup update check is not connected yet."
-      : "Setup app path could not be verified.",
+      ? "Hub update check is not connected yet."
+      : "Hub app path could not be verified.",
   };
 
   return {
