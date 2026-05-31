@@ -45,11 +45,11 @@ Expected shape:
 ```json
 {
   "version": "v0.1.0",
-  "assets": [
+  "artifacts": [
     {
-      "name": "misty-v0.1.0-macos-aarch64.zip",
+      "name": "misty-0.1.0-macos-aarch64.zip",
       "platform": "macos-aarch64",
-      "url": "https://github.com/misty-org/misty/releases/download/v0.1.0/misty-v0.1.0-macos-aarch64.zip",
+      "url": "https://github.com/misty-org/misty/releases/download/v0.1.0/misty-0.1.0-macos-aarch64.zip",
       "sha256": "replace-with-real-sha256"
     }
   ]
@@ -58,6 +58,6 @@ Expected shape:
 
 `platform` must match Rust's `std::env::consts::OS` and `std::env::consts::ARCH` joined with a dash, such as `macos-aarch64`, `macos-x86_64`, `windows-x86_64`, or `linux-x86_64`.
 
-Misty Hub initializes `~/.misty`, creates `~/.misty/db/data.db`, and downloads matching `.zip` assets into `~/.misty/.local/bin`. Installs are blocked until the local database has an authenticated Misty user.
+Misty Hub initializes `~/.misty`, creates `~/.misty/db/data.db`, and downloads matching `.zip` artifacts into `~/.misty/.local/bin`. Installs are blocked until the local database has an authenticated Misty user.
 
 For production, point each `url` at a short-lived signed URL or your download broker, then verify `sha256` before installing.

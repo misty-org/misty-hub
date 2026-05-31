@@ -1,6 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
-import { buildInstallerStatus, mistyPath, requiredMistyBinaries, requiredMistyFolders } from "../data/installReadiness";
+import {
+  buildInstallerStatus,
+  executableNameForOs,
+  mistyPath,
+  requiredMistyBinaries,
+  requiredMistyFolders,
+} from "../data/installReadiness";
 import { releases } from "../data/releases";
 import type {
   CurrentUser,
@@ -59,16 +65,16 @@ function browserSystemFallback(): InstallerStatus {
     })),
     binaries: [
       {
-        name: "misty",
-        path: "~/.misty/.local/bin/misty",
+        name: executableNameForOs(os, "misty"),
+        path: `~/.misty/.local/bin/${executableNameForOs(os, "misty")}`,
         required: true,
         exists: false,
         status: "missing",
         message: "Binary will be installed from a release archive.",
       },
       {
-        name: "misty-proxy",
-        path: "~/.misty/.local/bin/misty-proxy",
+        name: executableNameForOs(os, "misty-proxy"),
+        path: `~/.misty/.local/bin/${executableNameForOs(os, "misty-proxy")}`,
         required: true,
         exists: false,
         status: "missing",
@@ -92,7 +98,9 @@ async function loadInstallerStatus(nativeOverride?: NativeSystemInfo) {
     folders: requiredMistyFolders,
   });
   const binaryProbes = await invoke<PathProbe[]>("probe_paths", {
-    paths: requiredMistyBinaries.map((binary) => mistyPath(native.install_dir, binary)),
+    paths: requiredMistyBinaries.map((binary) =>
+      mistyPath(native.install_dir, executableNameForOs(native.os, binary)),
+    ),
   });
   const [setupProbe] = await invoke<PathProbe[]>("probe_paths", {
     paths: [native.setup_path],

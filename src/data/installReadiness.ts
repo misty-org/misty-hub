@@ -37,6 +37,14 @@ export function mistyPath(home: string, relativePath: string) {
   return `${home.replace(/\/+$/, "")}/${relativePath.replace(/^\/+/, "")}`;
 }
 
+export function executableNameForOs(os: string, binary: string) {
+  return os === "windows" ? `${binary}.exe` : binary;
+}
+
+function normalizePath(path: string) {
+  return path.replace(/\\/g, "/");
+}
+
 export function buildInstallerStatus(
   native: NativeSystemInfo,
   folderProbes: PathProbe[],
@@ -45,7 +53,7 @@ export function buildInstallerStatus(
 ): InstallerStatus {
   const folders = requiredMistyFolders.map((folder) => {
     const path = mistyPath(native.misty_home, folder);
-    const probe = folderProbes.find((candidate) => candidate.path === path);
+    const probe = folderProbes.find((candidate) => normalizePath(candidate.path) === normalizePath(path));
     return buildCheck({
       name: folder,
       path,
@@ -57,10 +65,11 @@ export function buildInstallerStatus(
   });
 
   const binaries = requiredMistyBinaries.map((binary) => {
-    const path = mistyPath(native.install_dir, binary);
-    const probe = binaryProbes.find((candidate) => candidate.path === path);
+    const executableName = executableNameForOs(native.os, binary);
+    const path = mistyPath(native.install_dir, executableName);
+    const probe = binaryProbes.find((candidate) => normalizePath(candidate.path) === normalizePath(path));
     return buildCheck({
-      name: binary,
+      name: executableName,
       path,
       required: true,
       exists: Boolean(probe?.is_file),

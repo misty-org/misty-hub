@@ -39,11 +39,12 @@ struct CurrentUser {
 #[derive(Debug, Deserialize)]
 struct ReleaseManifest {
     version: String,
-    assets: Vec<ReleaseAsset>,
+    #[serde(alias = "assets", default)]
+    artifacts: Vec<ReleaseArtifact>,
 }
 
 #[derive(Debug, Deserialize)]
-struct ReleaseAsset {
+struct ReleaseArtifact {
     name: String,
     platform: String,
     url: String,
@@ -165,28 +166,34 @@ async fn install_misty(manifest_url: String, version: String) -> Result<String, 
     let install_dir = misty_bin_dir()?;
     fs::create_dir_all(&install_dir)
         .map_err(|error| format!("Could not create install directory: {error}"))?;
-    let matching_assets: Vec<_> = manifest
-        .assets
+    let matching_artifacts: Vec<_> = manifest
+        .artifacts
         .iter()
-        .filter(|asset| asset.platform == platform)
+        .filter(|artifact| artifact.platform == platform)
         .collect();
 
-    if matching_assets.is_empty() {
-        return Err(format!("No Misty assets found for platform {platform}"));
+    if matching_artifacts.is_empty() {
+        return Err(format!("No Misty artifacts found for platform {platform}"));
     }
 
-    let asset_count = matching_assets.len();
-    for asset in matching_assets {
-        if !asset_is_zip(asset) {
+    let artifact_count = matching_artifacts.len();
+    for artifact in matching_artifacts {
+        let artifact_debug = format!(
+            "Matched artifact platform={} name={} url={}",
+            artifact.platform, artifact.name, artifact.url
+        );
+        if !artifact_is_zip(artifact) {
             return Err(format!(
-                "Unsupported asset type for {}. Misty Hub currently expects .zip assets.",
-                asset.name
+                "{}. Unsupported artifact type for {}. Misty Hub currently expects .zip artifacts.",
+                artifact_debug, artifact.name
             ));
         }
 
-        let archive = download_asset(&client, asset).await?;
+        let archive = download_artifact(&client, artifact)
+            .await
+            .map_err(|error| format!("{artifact_debug}. {error}"))?;
         extract_zip_archive(&archive, &home)
-            .map_err(|error| format!("Could not extract {}: {error}", asset.name))?;
+            .map_err(|error| format!("{artifact_debug}. Could not extract {}: {error}", artifact.name))?;
     }
 
     let resolved_version = if manifest.version.trim().is_empty() {
@@ -196,15 +203,15 @@ async fn install_misty(manifest_url: String, version: String) -> Result<String, 
     };
 
     Ok(format!(
-        "Installed Misty {resolved_version} for {platform} to {} from {asset_count} asset(s).",
+        "Installed Misty {resolved_version} for {platform} to {} from {artifact_count} artifact(s).",
         install_dir.display()
     ))
 }
 
 #[tauri::command]
 fn launch_misty() -> Result<String, String> {
-    let misty_path = misty_bin_dir()?.join("misty");
-    let misty_proxy_path = misty_bin_dir()?.join("misty-proxy");
+    let misty_path = misty_bin_dir()?.join(runtime_binary_name("misty"));
+    let misty_proxy_path = misty_bin_dir()?.join(runtime_binary_name("misty-proxy"));
 
     if !misty_path.is_file() {
         return Err(format!("Misty binary was not found at {}.", misty_path.display()));
@@ -446,17 +453,17 @@ async fn fetch_manifest(
         .map_err(|error| format!("Manifest JSON was invalid: {error}"))
 }
 
-async fn download_asset(client: &reqwest::Client, asset: &ReleaseAsset) -> Result<Vec<u8>, String> {
-    authed_get(client, &asset.url)
+async fn download_artifact(client: &reqwest::Client, artifact: &ReleaseArtifact) -> Result<Vec<u8>, String> {
+    authed_get(client, &artifact.url)
         .send()
         .await
-        .map_err(|error| format!("Could not download {}: {error}", asset.name))?
+        .map_err(|error| format!("Could not download {}: {error}", artifact.name))?
         .error_for_status()
-        .map_err(|error| format!("Download failed for {}: {error}", asset.name))?
+        .map_err(|error| format!("Download failed for {}: {error}", artifact.name))?
         .bytes()
         .await
         .map(|bytes| bytes.to_vec())
-        .map_err(|error| format!("Could not read {} download body: {error}", asset.name))
+        .map_err(|error| format!("Could not read {} download body: {error}", artifact.name))
 }
 
 fn authed_get(client: &reqwest::Client, url: &str) -> reqwest::RequestBuilder {
@@ -500,9 +507,9 @@ fn extract_zip_archive(archive_bytes: &[u8], misty_home: &Path) -> io::Result<()
     Ok(())
 }
 
-fn asset_is_zip(asset: &ReleaseAsset) -> bool {
-    asset.name.to_ascii_lowercase().ends_with(".zip")
-        || asset.url.to_ascii_lowercase().ends_with(".zip")
+fn artifact_is_zip(artifact: &ReleaseArtifact) -> bool {
+    artifact.name.to_ascii_lowercase().ends_with(".zip")
+        || artifact.url.to_ascii_lowercase().ends_with(".zip")
 }
 
 fn extract_plugin_zip_archive(
@@ -1002,6 +1009,18 @@ fn misty_db_dir() -> Result<PathBuf, String> {
 
 fn misty_db_path() -> Result<PathBuf, String> {
     misty_home_dir().map(|home| home.join("db").join("data.db"))
+}
+
+fn runtime_binary_name(base: &str) -> String {
+    #[cfg(target_os = "windows")]
+    {
+        format!("{base}.exe")
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        base.to_string()
+    }
 }
 
 fn main() {

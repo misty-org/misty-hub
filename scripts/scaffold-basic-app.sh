@@ -251,11 +251,12 @@ struct InstallerStatus {
 #[derive(Debug, Deserialize)]
 struct ReleaseManifest {
     version: String,
-    assets: Vec<ReleaseAsset>,
+    #[serde(alias = "assets", default)]
+    artifacts: Vec<ReleaseArtifact>,
 }
 
 #[derive(Debug, Deserialize)]
-struct ReleaseAsset {
+struct ReleaseArtifact {
     name: String,
     platform: String,
     url: String,
@@ -279,20 +280,20 @@ fn check_system() -> Result<InstallerStatus, String> {
 async fn install_misty(manifest_url: String) -> Result<String, String> {
     let manifest = fetch_manifest(&manifest_url).await?;
     let platform = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
-    let matching_assets: Vec<_> = manifest
-        .assets
+    let matching_artifacts: Vec<_> = manifest
+        .artifacts
         .iter()
-        .filter(|asset| asset.platform == platform)
+        .filter(|artifact| artifact.platform == platform)
         .collect();
 
-    if matching_assets.is_empty() {
-        return Err(format!("No Misty assets found for platform {platform}"));
+    if matching_artifacts.is_empty() {
+        return Err(format!("No Misty artifacts found for platform {platform}"));
     }
 
-    for asset in matching_assets {
+    for artifact in matching_artifacts {
         // TODO: Download to a temp file, verify SHA256, then atomically install.
         // Keep the downloader isolated so private auth can move from dev token to broker URLs.
-        let _ = (&asset.name, &asset.url, &asset.sha256);
+        let _ = (&artifact.name, &artifact.url, &artifact.sha256);
     }
 
     Ok(format!("Prepared Misty {} for {platform}. Download/install steps are scaffolded next.", manifest.version))

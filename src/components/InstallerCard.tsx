@@ -1,4 +1,6 @@
-import { CheckCircle2, CircleAlert, Download, RefreshCw } from "lucide-react";
+import { CheckCircle2, CircleAlert, Download, Expand, RefreshCw } from "lucide-react";
+import { useState } from "react";
+import { PanelModal } from "./PanelModal";
 import { VersionPicker } from "./VersionPicker";
 import { useSetupStore } from "../store/useSetupStore";
 import type { InstallCheck } from "../types/setup";
@@ -20,13 +22,13 @@ function platformLabel(osName: string) {
   }
 }
 
-function architectureLabel(arch: string) {
+function architectureLabel(osName: string, arch: string) {
   switch (arch) {
     case "aarch64":
     case "arm64":
-      return "Apple Silicon";
+      return osName === "macos" ? "Apple Silicon" : "ARM64";
     case "x86_64":
-      return "Intel";
+      return "x64";
     default:
       return arch;
   }
@@ -54,11 +56,12 @@ export function InstallerCard({
   embedded?: boolean;
 }) {
   const { busy, loadSystem, startInstall, status, systemError } = useSetupStore();
+  const [showMissingModal, setShowMissingModal] = useState(false);
   const canInstall = !busy && Boolean(status?.current_user) && !status?.ready;
   const osName = status?.os ?? (systemError ? "Unavailable" : "Resolving");
   const binaryType = status?.arch ?? (systemError ? "Unavailable" : "Resolving");
   const osLabel = platformLabel(osName);
-  const archLabel = architectureLabel(binaryType);
+  const archLabel = architectureLabel(osName, binaryType);
   const folderChecks = status?.folders ?? [];
   const binaryChecks = status?.binaries ?? [];
   const foldersReady = countReady(folderChecks);
@@ -107,18 +110,47 @@ export function InstallerCard({
         </div>
       </div>
 
-      <div className={allFound ? "px-4 py-4 text-emerald-200" : "py-2 text-xs"}>
+      <div className={allFound ? "px-4 py-4 text-emerald-200" : "flex min-h-0 flex-1 flex-col py-2 text-xs"}>
         {allFound ? (
           <div className="flex min-w-0 items-center gap-3">
             <CheckCircle2 aria-hidden="true" className="shrink-0" size={16} />
             <span className="min-w-0 truncate">All required files are present.</span>
           </div>
         ) : missingChecks.length > 0 ? (
-          missingChecks.map((check) => <CheckRow check={check} key={check.path} />)
+          <>
+            <div className="flex items-center justify-between gap-3 px-4 pb-2">
+              <p className="text-[11px] font-semibold tracking-[0.18em] text-[#8f8f8f] uppercase">
+                Missing Files
+              </p>
+              <button
+                className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] font-semibold tracking-[0.12em] text-[#d4d4d8] uppercase transition hover:border-white/20 hover:bg-white/[0.06] hover:text-white"
+                onClick={() => setShowMissingModal(true)}
+                type="button"
+              >
+                <Expand className="h-3.5 w-3.5" />
+                View all
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {missingChecks.map((check) => <CheckRow check={check} key={check.path} />)}
+            </div>
+          </>
         ) : (
           <div className="px-4 py-2 text-[#9aa3af]">Resolving install readiness.</div>
         )}
       </div>
+
+      {showMissingModal ? (
+        <PanelModal
+          onClose={() => setShowMissingModal(false)}
+          subtitle={`${missingChecks.length} required item${missingChecks.length === 1 ? "" : "s"} still missing`}
+          title="Missing install files"
+        >
+          <div className="py-2 text-xs">
+            {missingChecks.map((check) => <CheckRow check={check} key={check.path} />)}
+          </div>
+        </PanelModal>
+      ) : null}
     </div>
   );
 }
