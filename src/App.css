@@ -2,7 +2,7 @@
 @import "tailwindcss";
 @source "../vendor/misty-website/src";
 @source "./";
-@source "../../misty-docs/src";
+@source "../vendor/misty-docs/src";
 
 @theme {
   --color-white: #f1eee8;

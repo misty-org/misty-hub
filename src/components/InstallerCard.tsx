@@ -1,6 +1,11 @@
+<<<<<<< HEAD
 import { CheckCircle2, CircleAlert, Download, Expand, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { PanelModal } from "./PanelModal";
+=======
+import { CheckCircle2, CircleAlert, Download, RefreshCw } from "lucide-react";
+import { useAuth } from "../AuthContext";
+>>>>>>> b15629d (fixing installer)
 import { VersionPicker } from "./VersionPicker";
 import { useSetupStore } from "../store/useSetupStore";
 import type { InstallCheck } from "../types/setup";
@@ -55,9 +60,15 @@ export function InstallerCard({
   className?: string;
   embedded?: boolean;
 }) {
+  const { user } = useAuth();
   const { busy, loadSystem, startInstall, status, systemError } = useSetupStore();
+<<<<<<< HEAD
   const [showMissingModal, setShowMissingModal] = useState(false);
   const canInstall = !busy && Boolean(status?.current_user) && !status?.ready;
+=======
+  const currentUser = status?.current_user ?? user ?? null;
+  const canInstall = !busy && Boolean(currentUser) && !status?.ready;
+>>>>>>> b15629d (fixing installer)
   const osName = status?.os ?? (systemError ? "Unavailable" : "Resolving");
   const binaryType = status?.arch ?? (systemError ? "Unavailable" : "Resolving");
   const osLabel = platformLabel(osName);
@@ -82,7 +93,7 @@ export function InstallerCard({
         <button
           className="inline-flex h-10 shrink-0 items-center gap-2 rounded-md bg-[#f4f4f5] px-4 text-sm font-bold text-[#07090b] shadow-lg shadow-white/5 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
           disabled={!canInstall}
-          onClick={startInstall}
+          onClick={() => void startInstall(currentUser)}
           type="button"
         >
           <Download aria-hidden="true" className="h-4 w-4" />

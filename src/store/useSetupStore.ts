@@ -33,7 +33,7 @@ type SetupStore = {
   setSelectedVersion: (version: string) => void;
   launchMisty: () => Promise<void>;
   signOut: () => Promise<void>;
-  startInstall: () => Promise<void>;
+  startInstall: (userOverride?: CurrentUser | null) => Promise<void>;
 };
 
 function browserSystemFallback(): InstallerStatus {
@@ -180,16 +180,21 @@ export const useSetupStore = create<SetupStore>((set, get) => ({
       }));
     }
   },
-  startInstall: async () => {
-    const { status, selectedRelease } = get();
+  startInstall: async (userOverride) => {
+    const { saveAuthenticatedUser, status, selectedRelease } = get();
     const release = selectedRelease();
+    const installUser = status?.current_user ?? userOverride ?? null;
 
-    if (!status?.current_user) {
+    if (!installUser) {
       set({
         installState: "error",
         events: [{ level: "error", source: "installer", message: "Sign in to Misty before installing." }],
       });
       return;
+    }
+
+    if (!status?.current_user) {
+      await saveAuthenticatedUser(installUser);
     }
 
     set({
