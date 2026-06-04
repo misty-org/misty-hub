@@ -13,7 +13,6 @@ import { LoggerPanel } from "../../components/LoggerPanel";
 import { releases } from "../../data/releases";
 import { usePluginsStore } from "../../store/usePluginsStore";
 import { useSetupStore } from "../../store/useSetupStore";
-import { useUserStore } from "../../store/userStore";
 import { posts } from "@website/pages/Blog/data";
 import { changelog } from "@website/pages/Changelog/data";
 
@@ -22,7 +21,6 @@ export default function HomePage() {
   const { busy, events, installState, launchMisty, restartMisty, status, systemError } =
     useSetupStore();
   const { user } = useAuth();
-  const { me } = useUserStore();
   const {
     loadPlugins,
     marketplacePlugins,
@@ -31,7 +29,6 @@ export default function HomePage() {
   } = usePluginsStore();
   const currentUser = status?.current_user ?? user;
   const installerEvents = events.filter((event) => event.source === "installer");
-  const launcherEvents = events.filter((event) => event.source === "launcher");
 
   useEffect(() => {
     if (!status || marketplacePlugins.length > 0 || installedPluginEntries.length > 0 || pluginsLoading) {
@@ -54,7 +51,6 @@ export default function HomePage() {
     Boolean(systemError) ||
     installState === "error" ||
     installerEvents.some((event) => event.level === "error");
-  const hasLauncherError = launcherEvents.some((event) => event.level === "error");
   const latestChangelog = changelog[0] ?? {
     version: releases[0].version,
     date: releases[0].date,

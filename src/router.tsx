@@ -1,8 +1,9 @@
 import { createHashRouter } from "react-router";
-import Docs from "@docs/index";
+import Docs from "@website/pages/Docs";
 import Changelog from "@website/pages/Changelog";
 import { AuthProvider } from "./AuthContext";
 import { HubShell } from "./components/HubShell";
+import DashboardPage from "./pages/Dashboard";
 import SettingsPage from "./pages/Account";
 import HomePage from "./pages/Home";
 import PluginsPage from "./pages/Plugins";
@@ -18,6 +19,7 @@ export const router = createHashRouter([
     ),
     children: [
       { index: true, element: <HomePage />, handle: { title: "Misty Hub - Home" } },
+      { path: "dashboard", element: <DashboardPage />, handle: { title: "Misty Hub - Dashboard" } },
       { path: "docs/*", element: <Docs />, handle: { title: "Misty Hub - Docs" } },
       { path: "plugins", element: <PluginsPage />, handle: { title: "Misty Hub - Plugins" } },
       { path: "resources/changelog", element: <Changelog />, handle: { title: "Misty Hub - Changelog" } },

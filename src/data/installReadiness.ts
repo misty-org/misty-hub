@@ -97,6 +97,7 @@ export function buildInstallerStatus(
     legacy_install_dir: native.legacy_install_dir,
     db_path: native.db_path,
     current_user: native.current_user,
+    current_license: native.current_license,
     ready: [...folders, ...binaries].every((check) => !check.required || check.exists),
     folders,
     binaries,

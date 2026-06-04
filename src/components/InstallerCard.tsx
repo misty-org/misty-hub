@@ -1,11 +1,7 @@
-<<<<<<< HEAD
 import { CheckCircle2, CircleAlert, Download, Expand, RefreshCw } from "lucide-react";
 import { useState } from "react";
-import { PanelModal } from "./PanelModal";
-=======
-import { CheckCircle2, CircleAlert, Download, RefreshCw } from "lucide-react";
 import { useAuth } from "../AuthContext";
->>>>>>> b15629d (fixing installer)
+import { PanelModal } from "./PanelModal";
 import { VersionPicker } from "./VersionPicker";
 import { useSetupStore } from "../store/useSetupStore";
 import type { InstallCheck } from "../types/setup";
@@ -62,13 +58,9 @@ export function InstallerCard({
 }) {
   const { user } = useAuth();
   const { busy, loadSystem, startInstall, status, systemError } = useSetupStore();
-<<<<<<< HEAD
   const [showMissingModal, setShowMissingModal] = useState(false);
-  const canInstall = !busy && Boolean(status?.current_user) && !status?.ready;
-=======
   const currentUser = status?.current_user ?? user ?? null;
   const canInstall = !busy && Boolean(currentUser) && !status?.ready;
->>>>>>> b15629d (fixing installer)
   const osName = status?.os ?? (systemError ? "Unavailable" : "Resolving");
   const binaryType = status?.arch ?? (systemError ? "Unavailable" : "Resolving");
   const osLabel = platformLabel(osName);

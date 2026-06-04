@@ -7,8 +7,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@website/*": ["vendor/misty-website/src/*"],
-      "@docs/*": ["vendor/misty-docs/src/*"]
+      "@website/*": ["vendor/misty-website/src/*"]
     },
     "types": ["vite/client"],
     "skipLibCheck": true,
@@ -28,5 +27,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "vendor/misty-website/src", "vendor/misty-docs/src"]
+  "include": ["src", "vendor/misty-website/src"]
 }

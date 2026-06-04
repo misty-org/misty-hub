@@ -9,7 +9,6 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "src"),
       "@website": path.resolve(__dirname, "vendor/misty-website/src"),
-      "@docs": path.resolve(__dirname, "vendor/misty-docs/src"),
       react: path.resolve(__dirname, "node_modules/react"),
       "react/jsx-runtime": path.resolve(__dirname, "node_modules/react/jsx-runtime.js"),
       "react-dom": path.resolve(__dirname, "node_modules/react-dom"),

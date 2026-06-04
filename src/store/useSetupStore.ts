@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
+import { fetchMe, type MeResponse } from "@website/pages/Dashboard/api";
 import {
   buildInstallerStatus,
   executableNameForOs,
@@ -9,6 +10,7 @@ import {
 } from "../data/installReadiness";
 import { releases } from "../data/releases";
 import type {
+  CurrentLicense,
   CurrentUser,
   InstallEvent,
   InstallerStatus,
@@ -28,8 +30,9 @@ type SetupStore = {
   selectedRelease: () => ReleaseVersion;
   addEvent: (event: InstallEvent) => void;
   loadSystem: () => Promise<void>;
+  refreshLocalAccessToken: () => Promise<void>;
   restartMisty: () => Promise<void>;
-  saveAuthenticatedUser: (user: CurrentUser) => Promise<void>;
+  saveAuthenticatedUser: (user: CurrentUser, license?: CurrentLicense | null) => Promise<void>;
   setSelectedVersion: (version: string) => void;
   launchMisty: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -54,6 +57,7 @@ function browserSystemFallback(): InstallerStatus {
     legacy_install_dir: "~/.misty/local/bin",
     db_path: "~/.misty/db/data.db",
     current_user: null,
+    current_license: null,
     ready: false,
     folders: requiredMistyFolders.map((folder) => ({
       name: folder,
@@ -109,6 +113,36 @@ async function loadInstallerStatus(nativeOverride?: NativeSystemInfo) {
   return buildInstallerStatus(native, folderProbes, binaryProbes, setupProbe);
 }
 
+async function refreshLocalAccessToken() {
+  return invoke<NativeSystemInfo>("ensure_local_access_token");
+}
+
+function licenseFromMe(me: MeResponse): CurrentLicense {
+  return {
+    tier: me.tier,
+    status: me.status,
+    allows_use: me.allows_use,
+    expires_at: me.expires_at,
+    trial_started_at: me.trial_started_at,
+    license_device: me.license_device || null,
+  };
+}
+
+async function refreshVerifiedLicenseIfDue(native: NativeSystemInfo) {
+  if (!native.current_user || !native.current_license?.needs_refresh) {
+    return native;
+  }
+  try {
+    const me = await fetchMe();
+    return invoke<NativeSystemInfo>("save_verified_license", {
+      license: licenseFromMe(me),
+    });
+  } catch (error) {
+    void error;
+    return native;
+  }
+}
+
 export const useSetupStore = create<SetupStore>((set, get) => ({
   busy: false,
   events: [],
@@ -121,7 +155,12 @@ export const useSetupStore = create<SetupStore>((set, get) => ({
   addEvent: (event) => set((state) => ({ events: [...state.events, event] })),
   loadSystem: async () => {
     try {
-      const status = await loadInstallerStatus();
+      let native = await invoke<NativeSystemInfo>("check_system");
+      if (native.current_user) {
+        native = await refreshLocalAccessToken();
+        native = await refreshVerifiedLicenseIfDue(native);
+      }
+      const status = await loadInstallerStatus(native);
       set({ status, systemError: "" });
     } catch (error) {
       if (String(error).toLowerCase().includes("invoke")) {
@@ -132,14 +171,30 @@ export const useSetupStore = create<SetupStore>((set, get) => ({
       set({ systemError: String(error) });
     }
   },
-  saveAuthenticatedUser: async (user) => {
-    const native = await invoke<NativeSystemInfo>("save_authenticated_user", { user });
+  refreshLocalAccessToken: async () => {
+    try {
+      const native = await refreshLocalAccessToken();
+      if (!native.current_user) {
+        return;
+      }
+      const refreshedNative = await refreshVerifiedLicenseIfDue(native);
+      const status = await loadInstallerStatus(refreshedNative);
+      set({ status, systemError: "" });
+    } catch (error) {
+      void error;
+    }
+  },
+  saveAuthenticatedUser: async (user, license) => {
+    const native = await invoke<NativeSystemInfo>("save_authenticated_user", {
+      user,
+      license: license ?? null,
+    });
     const status = await loadInstallerStatus(native);
-      set((state) => ({
-        status,
-        systemError: "",
-        events: [...state.events, { level: "info", source: "installer", message: `Signed in as ${user.email}.` }],
-      }));
+    set((state) => ({
+      status,
+      systemError: "",
+      events: [...state.events, { level: "info", source: "installer", message: `Signed in as ${user.email}.` }],
+    }));
   },
   setSelectedVersion: (selectedVersion) => set({ selectedVersion }),
   launchMisty: async () => {

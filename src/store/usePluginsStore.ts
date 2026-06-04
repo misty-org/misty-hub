@@ -234,32 +234,6 @@ function toPluginEntry(
   };
 }
 
-function toLocalOnlyPluginEntry(local: LocalPluginRecord): PluginEntry {
-  return {
-    id: local.id,
-    name: local.name,
-    version: local.version,
-    author: local.author,
-    overview: local.overview,
-    status: local.enabled ? "installed" : "disabled",
-    root: local.root,
-    installed: true,
-    enabled: local.enabled,
-    verified: local.verified,
-    manifest_path: local.manifest_path,
-    plugin_dir: local.plugin_dir,
-    logo_path: resolveLocalAssetUrl(local.logo_path),
-    capabilities: local.capabilities,
-    where_it_appears: local.where_it_appears,
-    permissions: local.permissions,
-    getting_started: local.getting_started,
-    changelog: local.changelog,
-    links: local.links,
-    actions: local.actions,
-    launcher: local.launcher,
-  };
-}
-
 function mergeCatalogPlugins(
   catalogEntries: PluginCatalogEntry[],
   localPlugins: LocalPluginRecord[],
