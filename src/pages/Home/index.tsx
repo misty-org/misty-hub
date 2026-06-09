@@ -1,10 +1,4 @@
-import {
-  ArrowRight,
-  FileText,
-  Sparkles,
-  Play,
-  RotateCcw,
-} from "lucide-react";
+import { ArrowRight, FileText, Sparkles, Play, RotateCcw } from "lucide-react";
 import { useEffect } from "react";
 import { Link, Navigate, useLocation } from "react-router";
 import { useAuth } from "../../AuthContext";
@@ -18,8 +12,15 @@ import { changelog } from "@website/pages/Changelog/data";
 
 export default function HomePage() {
   const location = useLocation();
-  const { busy, events, installState, launchMisty, restartMisty, status, systemError } =
-    useSetupStore();
+  const {
+    busy,
+    events,
+    installState,
+    launchMisty,
+    restartMisty,
+    status,
+    systemError,
+  } = useSetupStore();
   const { user } = useAuth();
   const {
     loadPlugins,
@@ -28,22 +29,37 @@ export default function HomePage() {
     loading: pluginsLoading,
   } = usePluginsStore();
   const currentUser = status?.current_user ?? user;
-  const installerEvents = events.filter((event) => event.source === "installer");
+  const installerEvents = events.filter(
+    (event) => event.source === "installer",
+  );
 
   useEffect(() => {
-    if (!status || marketplacePlugins.length > 0 || installedPluginEntries.length > 0 || pluginsLoading) {
+    if (
+      !status ||
+      marketplacePlugins.length > 0 ||
+      installedPluginEntries.length > 0 ||
+      pluginsLoading
+    ) {
       return;
     }
 
     void loadPlugins(`${status.os}-${status.arch}`);
-  }, [installedPluginEntries.length, loadPlugins, marketplacePlugins.length, pluginsLoading, status]);
+  }, [
+    installedPluginEntries.length,
+    loadPlugins,
+    marketplacePlugins.length,
+    pluginsLoading,
+    status,
+  ]);
 
   if (!currentUser) {
     if (!status && !systemError) {
       return null;
     }
 
-    return <Navigate replace state={{ from: location.pathname }} to="/signin" />;
+    return (
+      <Navigate replace state={{ from: location.pathname }} to="/signin" />
+    );
   }
 
   const ready = Boolean(status?.ready);
@@ -64,9 +80,11 @@ export default function HomePage() {
     "flex min-h-0 flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[#0a0d10]/95 p-6 shadow-2xl shadow-black/25";
 
   return (
-    <div className="mx-auto flex w-full max-w-[1200px] flex-1 flex-col px-5 py-4">
+    <div className="mx-auto flex w-full max-w-300 flex-1 flex-col px-5 py-4">
       <div className="border-b border-white/[0.07] pb-4">
-        <h1 className="text-[34px] font-semibold tracking-[-0.03em] text-text">Home</h1>
+        <h1 className="text-[34px] font-semibold tracking-[-0.03em] text-text">
+          Home
+        </h1>
       </div>
 
       <section className="grid content-start grid-cols-2 gap-2">
@@ -75,7 +93,12 @@ export default function HomePage() {
         </div>
 
         <div className={topPanelClass}>
-          <LoggerPanel className="h-full flex-1" emptyLabel="No activity yet." fill source="all" />
+          <LoggerPanel
+            className="h-full flex-1"
+            emptyLabel="No activity yet."
+            fill
+            source="all"
+          />
 
           <div className="mt-5 flex flex-wrap gap-3">
             <button
@@ -87,7 +110,7 @@ export default function HomePage() {
               <RotateCcw className="h-4 w-4" />
               Restart
             </button>
-            
+
             <button
               className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={!ready || busy || hasInstallerError}
@@ -123,10 +146,16 @@ export default function HomePage() {
                 <span className="text-xs font-medium uppercase tracking-[0.12em] text-text-muted">
                   {latestPost.tag}
                 </span>
-                <span className="text-xs text-text-muted">{latestPost.date}</span>
+                <span className="text-xs text-text-muted">
+                  {latestPost.date}
+                </span>
               </div>
-              <h2 className="mt-4 text-xl font-semibold text-text">{latestPost.title}</h2>
-              <p className="mt-3 text-sm leading-7 text-text-muted">{latestPost.summary}</p>
+              <h2 className="mt-4 text-xl font-semibold text-text">
+                {latestPost.title}
+              </h2>
+              <p className="mt-3 text-sm leading-7 text-text-muted">
+                {latestPost.summary}
+              </p>
             </div>
           ) : (
             <div className="mt-5 rounded-3xl border border-dashed border-white/10 px-5 py-10 text-sm text-text-muted">
@@ -155,9 +184,13 @@ export default function HomePage() {
               <span className="text-xs font-medium uppercase tracking-[0.12em] text-text-muted">
                 {latestChangelog.version}
               </span>
-              <span className="text-xs text-text-muted">{latestChangelog.date}</span>
+              <span className="text-xs text-text-muted">
+                {latestChangelog.date}
+              </span>
             </div>
-            <h2 className="mt-4 text-xl font-semibold text-text">{latestChangelog.summary}</h2>
+            <h2 className="mt-4 text-xl font-semibold text-text">
+              {latestChangelog.summary}
+            </h2>
             <div className="mt-4 grid gap-2">
               {latestChangelog.changes.slice(0, 3).map((change) => (
                 <p key={change} className="text-sm leading-7 text-text-muted">
