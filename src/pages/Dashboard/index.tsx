@@ -2,7 +2,9 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   Activity,
   Bug,
+  ClipboardList,
   FileText,
+  MonitorDot,
   RefreshCw,
   Server,
   TerminalSquare,
@@ -17,6 +19,32 @@ type LogFileSnapshot = {
   exists: boolean;
   size_bytes: number;
   content: string;
+};
+
+type ClipboardDevice = {
+  device_id: string;
+  device_name: string;
+  last_seen_unix_ms: number;
+  online: boolean;
+};
+
+type ClipboardPayload = {
+  payload_id: string;
+  kind: string;
+  source_device_id: string;
+  source_device_name: string;
+  revision: number;
+  created_unix_ms: number;
+  text: string;
+  file_refs: Array<unknown>;
+};
+
+type ClipboardProxySnapshot = {
+  proxy_running: boolean;
+  proxy_url: string | null;
+  devices: ClipboardDevice[];
+  latest: ClipboardPayload | null;
+  error: string | null;
 };
 
 const logs: Array<{
@@ -75,9 +103,28 @@ function browserFallback(name: LogKey): LogFileSnapshot {
   };
 }
 
+function formatTime(ms: number) {
+  if (!Number.isFinite(ms) || ms <= 0) {
+    return "Never";
+  }
+  return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function latestLabel(payload: ClipboardPayload | null) {
+  if (!payload) {
+    return "No shared clipboard";
+  }
+  if (payload.kind === "text") {
+    const text = payload.text.trim();
+    return text ? text : "Empty text clipboard";
+  }
+  return `${payload.file_refs.length} file ref${payload.file_refs.length === 1 ? "" : "s"}`;
+}
+
 export default function DashboardPage() {
   const [activeLog, setActiveLog] = useState<LogKey>("misty-hub");
   const [snapshots, setSnapshots] = useState<Partial<Record<LogKey, LogFileSnapshot>>>({});
+  const [clipboard, setClipboard] = useState<ClipboardProxySnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -109,7 +156,23 @@ export default function DashboardPage() {
   async function refreshAll() {
     setLoading(true);
     try {
-      await Promise.all(logs.map((log) => loadLog(log.key)));
+      await Promise.all([
+        ...logs.map((log) => loadLog(log.key)),
+        invoke<ClipboardProxySnapshot>("get_clipboard_proxy_snapshot")
+          .then((snapshot) => setClipboard(snapshot))
+          .catch((requestError) => {
+            const message = String(requestError);
+            setClipboard({
+              proxy_running: false,
+              proxy_url: null,
+              devices: [],
+              latest: null,
+              error: message.toLowerCase().includes("invoke")
+                ? "Clipboard relay state is available in the Misty Hub desktop app."
+                : message,
+            });
+          }),
+      ]);
     } finally {
       setLoading(false);
     }
@@ -145,6 +208,78 @@ export default function DashboardPage() {
           Refresh
         </button>
       </div>
+
+      <section className="grid gap-3 border-b border-white/[0.07] py-4 md:grid-cols-[220px_minmax(0,1fr)_280px]">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.06] text-text">
+              <Server className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-xs text-text-muted">Clipboard Relay</p>
+              <p className="text-sm font-semibold text-text">
+                {clipboard?.proxy_running ? "Proxy online" : "Proxy stopped"}
+              </p>
+            </div>
+          </div>
+          <p className="mt-3 truncate text-xs text-text-muted">
+            {clipboard?.proxy_url ?? "No local proxy port"}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.06] text-text">
+                <ClipboardList className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs text-text-muted">Latest Shared</p>
+                <p className="truncate text-sm font-semibold text-text">
+                  {latestLabel(clipboard?.latest ?? null)}
+                </p>
+              </div>
+            </div>
+            <span className="shrink-0 text-xs text-text-muted">
+              rev {clipboard?.latest?.revision ?? 0}
+            </span>
+          </div>
+          <p className="mt-3 truncate text-xs text-text-muted">
+            {clipboard?.latest
+              ? `${clipboard.latest.source_device_name || clipboard.latest.source_device_id} at ${formatTime(
+                  clipboard.latest.created_unix_ms,
+                )}`
+              : clipboard?.error ?? "Publish from Misty to populate shared clipboard state."}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.06] text-text">
+                <MonitorDot className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-xs text-text-muted">Devices</p>
+                <p className="text-sm font-semibold text-text">
+                  {clipboard?.devices.length ?? 0} registered
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="space-y-1">
+            {(clipboard?.devices ?? []).slice(0, 3).map((device) => (
+              <div className="flex items-center justify-between gap-3 text-xs" key={device.device_id}>
+                <span className="truncate text-text">{device.device_name}</span>
+                <span className="shrink-0 text-text-muted">{formatTime(device.last_seen_unix_ms)}</span>
+              </div>
+            ))}
+            {clipboard && clipboard.devices.length === 0 ? (
+              <p className="text-xs text-text-muted">No registered devices yet.</p>
+            ) : null}
+          </div>
+        </div>
+      </section>
 
       <section className="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)] gap-4 py-4">
         <aside className="flex min-h-0 flex-col gap-2 overflow-y-auto border-r border-white/[0.07] pr-4">

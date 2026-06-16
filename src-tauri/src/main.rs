@@ -93,6 +93,51 @@ struct LogFileSnapshot {
     content: String,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct ClipboardFileRef {
+    display_name: String,
+    local_path: String,
+    remote_name: String,
+    remote_path: String,
+    is_dir: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct ClipboardPayload {
+    payload_id: String,
+    kind: String,
+    source_device_id: String,
+    source_device_name: String,
+    revision: u64,
+    created_unix_ms: i64,
+    text: String,
+    #[serde(default)]
+    file_refs: Vec<ClipboardFileRef>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct ClipboardDevice {
+    device_id: String,
+    device_name: String,
+    last_seen_unix_ms: i64,
+    online: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct ClipboardDevicesResponse {
+    #[serde(default)]
+    devices: Vec<ClipboardDevice>,
+}
+
+#[derive(Debug, Serialize)]
+struct ClipboardProxySnapshot {
+    proxy_running: bool,
+    proxy_url: Option<String>,
+    devices: Vec<ClipboardDevice>,
+    latest: Option<ClipboardPayload>,
+    error: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 struct ReleaseManifest {
     version: String,
@@ -688,6 +733,77 @@ async fn install_misty(manifest_url: String, version: String) -> Result<String, 
 #[tauri::command]
 fn get_misty_process_status() -> MistyProcessStatus {
     current_misty_process_status()
+}
+
+#[tauri::command]
+async fn get_clipboard_proxy_snapshot() -> Result<ClipboardProxySnapshot, String> {
+    ensure_database()?;
+    let status = current_misty_process_status();
+    let Some(port) = status.misty_proxy_port else {
+        return Ok(ClipboardProxySnapshot {
+            proxy_running: false,
+            proxy_url: None,
+            devices: Vec::new(),
+            latest: None,
+            error: None,
+        });
+    };
+
+    let proxy_url = format!("http://127.0.0.1:{port}");
+    let token = current_local_access_token()?;
+    let Some(token) = token else {
+        return Ok(ClipboardProxySnapshot {
+            proxy_running: true,
+            proxy_url: Some(proxy_url),
+            devices: Vec::new(),
+            latest: None,
+            error: Some("Sign in to Misty Hub to view clipboard relay state.".to_string()),
+        });
+    };
+
+    let client = reqwest::Client::new();
+    let devices_url = format!("{proxy_url}/api/clipboard/devices");
+    let latest_url = format!("{proxy_url}/api/clipboard/latest");
+
+    let devices = client
+        .get(&devices_url)
+        .bearer_auth(&token)
+        .send()
+        .await
+        .map_err(|error| format!("Could not reach misty-proxy clipboard devices: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("misty-proxy clipboard devices failed: {error}"))?
+        .json::<ClipboardDevicesResponse>()
+        .await
+        .map_err(|error| format!("Clipboard devices JSON was invalid: {error}"))?
+        .devices;
+
+    let latest_response = client
+        .get(&latest_url)
+        .bearer_auth(&token)
+        .send()
+        .await
+        .map_err(|error| format!("Could not reach misty-proxy clipboard latest: {error}"))?;
+    let latest = if latest_response.status() == reqwest::StatusCode::NO_CONTENT {
+        None
+    } else {
+        Some(
+            latest_response
+                .error_for_status()
+                .map_err(|error| format!("misty-proxy clipboard latest failed: {error}"))?
+                .json::<ClipboardPayload>()
+                .await
+                .map_err(|error| format!("Clipboard latest JSON was invalid: {error}"))?,
+        )
+    };
+
+    Ok(ClipboardProxySnapshot {
+        proxy_running: true,
+        proxy_url: Some(proxy_url),
+        devices,
+        latest,
+        error: None,
+    })
 }
 
 #[tauri::command]
@@ -2048,6 +2164,28 @@ fn current_user() -> Result<Option<CurrentUser>, String> {
     .map_err(|error| format!("Could not read signed in Misty user: {error}"))
 }
 
+fn current_local_access_token() -> Result<Option<String>, String> {
+    let conn = Connection::open(misty_db_path()?)
+        .map_err(|error| format!("Could not open Misty database: {error}"))?;
+    bootstrap_database(&conn)
+        .map_err(|error| format!("Could not initialize Misty database: {error}"))?;
+
+    conn.query_row(
+        r#"
+        SELECT token
+        FROM access_tokens
+        WHERE revoked = 0
+          AND datetime(expires_at) > datetime('now')
+        ORDER BY datetime(created_at) DESC
+        LIMIT 1
+        "#,
+        params![],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+    .map_err(|error| format!("Could not read local Misty access token: {error}"))
+}
+
 fn current_license() -> Result<Option<CurrentLicense>, String> {
     let conn = Connection::open(misty_db_path()?)
         .map_err(|error| format!("Could not open Misty database: {error}"))?;
@@ -2267,6 +2405,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             check_system,
             ensure_misty_folders,
+            get_clipboard_proxy_snapshot,
             get_misty_process_status,
             install_misty,
             install_plugin_bundle,
